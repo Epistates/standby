@@ -1,0 +1,42 @@
+[package]
+name = "standby"
+version = "0.1.0"
+edition = "2024"
+authors = ["Nick Paterno <nick@epistates.com>"]
+license = "MIT OR Apache-2.0"
+description = "A world-class cross-platform time management tool for sleep, timeout, and wait operations with full POSIX compliance and GNU coreutils compatibility"
+repository = "https://github.com/epistates/standby"
+homepage = "https://github.com/epistates/standby"
+documentation = "https://docs.rs/standby"
+readme = "README.md"
+keywords = ["sleep", "timeout", "wait", "time", "posix"]
+categories = ["command-line-utilities"]
+exclude = [".git*", ".claude", "target/", "*.swp", "*.swo", ".DS_Store"]
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+anyhow = "1.0"
+thiserror = "1.0"
+libc = "0.2"
+tokio = { version = "1.45", features = ["full"] }
+ctrlc = "3.4"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.27", features = ["process", "signal"] }
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winnt", "handleapi", "processthreadsapi", "winbase"] }
+
+[lib]
+name = "standby"
+path = "src/lib.rs"
+
+[[bin]]
+name = "standby"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
