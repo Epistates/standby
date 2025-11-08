@@ -1,4 +1,4 @@
-# Standby: World-Class Cross-Platform Time Management Tool
+# Standby: Cross-Platform Time Management Tool
 
 [![Crates.io](https://img.shields.io/crates/v/standby.svg)](https://crates.io/crates/standby)
 [![Docs](https://docs.rs/standby/badge.svg)](https://docs.rs/standby)
