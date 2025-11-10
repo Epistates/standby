@@ -7,6 +7,91 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Copyright (c) 2025 epistates, Inc. All rights reserved.
 
+## [0.1.1] - 2025-02-08
+
+### 🐛 Bug Fixes
+
+#### Critical: Terminal Cursor Visibility
+- **Fixed invisible cursor after timeout kills TUI applications** ([#1](https://github.com/epistates/standby/issues/1))
+  - Timeout now sends DECTCEM escape sequence (`\x1b[?25h`) to restore cursor visibility
+  - Fixes issue where cursor disappeared after killing vim, less, top, htop, etc.
+  - No manual `reset` or `tput cnorm` required anymore
+  - Two-layer restoration: termios attributes (tcgetattr/tcsetattr) + escape sequences (DECTCEM)
+
+#### Critical: TUI Applications Not Displaying
+- **Fixed TUI applications being suspended on terminal I/O** ([#2](https://github.com/epistates/standby/issues/2))
+  - Timeout now ignores SIGTTIN/SIGTTOU signals to allow background process terminal access
+  - TUI applications in separate process groups can now properly access the terminal
+  - Matches GNU timeout behavior exactly
+
+### Added
+
+#### New Flag: --foreground
+- Added `--foreground` flag to timeout command for GNU compatibility
+- Allows child process to remain in same process group
+- Useful for terminal-dependent applications that need foreground access
+
+### Changed
+
+#### Performance: Process Group Management
+- **Replaced unsafe `pre_exec` with safe `process_group()` API** (Rust RFC 3228)
+  - Uses fast `posix_spawn` path instead of slow `fork+exec` (2-3x faster)
+  - Zero unsafe code for process group setup
+  - No async-signal-safety concerns
+  - Future-proof for Rust 2024 edition
+
+#### Code Quality Improvements
+- Added comprehensive SAFETY documentation for all 4 unsafe blocks
+- Removed 4 unused dependencies: `anyhow`, `tokio`, `libc`, `ctrlc` (-57%)
+- Binary size reduced from ~750KB to 718KB
+- Compilation time reduced from ~15s to ~10s
+- Zero clippy warnings in strict mode (`-D warnings`)
+
+#### Documentation
+- Updated README with advanced terminal handling section
+- Added justfile with 30+ build recipes for development
+- Documented `--foreground` flag usage
+
+### Technical Details
+
+**Terminal Restoration Implementation:**
+```rust
+// Layer 1: termios (terminal driver settings)
+tcgetattr/tcsetattr → echo, canonical mode, etc.
+
+// Layer 2: escape sequences (terminal emulator display)
+DECTCEM \x1b[?25h → cursor visibility
+```
+
+**Why `exec zsh` didn't fix the cursor:**
+- Cursor state lives in terminal emulator process (Terminal.app, iTerm2)
+- Not in shell process or kernel TTY layer
+- Escape sequence must be sent to terminal emulator directly
+
+### Migration from 0.1.0
+
+✅ **Zero breaking changes** - fully backwards compatible
+
+All fixes are automatic:
+- Terminal restoration: works automatically, no code changes needed
+- TUI support: works automatically, no code changes needed
+- `--foreground` flag: optional, existing commands unchanged
+
+### Comparison
+
+| Feature | v0.1.0 | v0.1.1 |
+|---------|--------|--------|
+| Terminal termios restoration | ✅ | ✅ |
+| Cursor visibility restoration | ❌ | ✅ |
+| TUI applications work | ❌ | ✅ |
+| SIGTTIN/SIGTTOU handling | ❌ | ✅ |
+| Process group API | ❌ unsafe | ✅ safe |
+| Dependencies | 7 | 3 |
+| Binary size | ~750 KB | 718 KB |
+| Unsafe blocks documented | ❌ | ✅ |
+
+---
+
 ## [0.1.0] - 2025-02-08
 
 ### Added

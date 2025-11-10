@@ -1,4 +1,4 @@
-use crate::errors::{StandbyError, Result};
+use crate::errors::{Result, StandbyError};
 use crate::time::Duration;
 
 /// Parses a time duration string in various formats
@@ -61,7 +61,7 @@ fn parse_duration_with_units(input: &str) -> Result<Duration> {
             return Err(StandbyError::InvalidTimeFormat(format!(
                 "Unknown time unit: {}",
                 unit
-            )))
+            )));
         }
     };
 
@@ -100,7 +100,8 @@ fn parse_compound_duration(input: &str) -> Result<Duration> {
                 0
             } else {
                 // Skip whitespace and find where the number starts
-                number_part.rfind(|c: char| c.is_whitespace() || !c.is_numeric() && c != '.')
+                number_part
+                    .rfind(|c: char| c.is_whitespace() || !c.is_numeric() && c != '.')
                     .map(|p| p + 1)
                     .unwrap_or(0)
             };
@@ -108,11 +109,12 @@ fn parse_compound_duration(input: &str) -> Result<Duration> {
             let number_str = number_part[start..].trim();
 
             if !number_str.is_empty() {
-                let value = number_str
-                    .parse::<f64>()
-                    .map_err(|_| StandbyError::InvalidTimeFormat(
-                        format!("Invalid number in compound duration: {}", number_str),
-                    ))?;
+                let value = number_str.parse::<f64>().map_err(|_| {
+                    StandbyError::InvalidTimeFormat(format!(
+                        "Invalid number in compound duration: {}",
+                        number_str
+                    ))
+                })?;
 
                 total_seconds += value * multiplier;
                 remaining = &remaining[pos + unit_str.len()..];

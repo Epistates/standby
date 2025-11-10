@@ -30,10 +30,10 @@
 //! assert_eq!(d.nanos, 500_000_000);
 //! ```
 
-/// Time format parsing utilities.
-pub mod parser;
 /// Duration representation with nanosecond precision.
 pub mod duration;
+/// Time format parsing utilities.
+pub mod parser;
 
 pub use duration::Duration;
 pub use parser::parse_duration;

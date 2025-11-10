@@ -1,5 +1,5 @@
+use crate::errors::{Result, StandbyError};
 use std::fmt;
-use crate::errors::{StandbyError, Result};
 
 /// Represents a time duration with nanosecond precision
 /// Supports values up to POSIX maximum of ~2.1 billion seconds
@@ -61,7 +61,9 @@ impl Duration {
 
     /// Returns total nanoseconds (will overflow for large values)
     pub fn as_nanos(&self) -> u64 {
-        self.secs.saturating_mul(1_000_000_000).saturating_add(self.nanos as u64)
+        self.secs
+            .saturating_mul(1_000_000_000)
+            .saturating_add(self.nanos as u64)
     }
 
     /// Returns as std::time::Duration if possible

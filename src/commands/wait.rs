@@ -43,21 +43,21 @@ pub fn execute(args: WaitArgs) -> Result<()> {
 /// Unix implementation of process waiting.
 #[cfg(unix)]
 fn wait_unix(pids: Vec<u32>, timeout: Option<std::time::Duration>) -> Result<()> {
-    use std::time::Instant;
-    use nix::sys::wait::{waitpid, WaitStatus};
+    use nix::sys::wait::{WaitStatus, waitpid};
     use nix::unistd::Pid;
+    use std::time::Instant;
 
     let start = Instant::now();
     let mut remaining_pids: std::collections::HashSet<u32> = pids.iter().copied().collect();
 
     while !remaining_pids.is_empty() {
         // Check if timeout exceeded
-        if let Some(timeout) = timeout {
-            if start.elapsed() >= timeout {
-                return Err(StandbyError::ProcessError(
-                    "Timeout waiting for processes".to_string(),
-                ));
-            }
+        if let Some(timeout) = timeout
+            && start.elapsed() >= timeout
+        {
+            return Err(StandbyError::ProcessError(
+                "Timeout waiting for processes".to_string(),
+            ));
         }
 
         // Try to wait for any child with WNOHANG (non-blocking)

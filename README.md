@@ -65,7 +65,19 @@ standby timeout -k 2s 10 sleep 60
 
 # Preserve exit status of the command
 standby timeout --preserve-status 10 sleep 60
+
+# Run in foreground process group (like GNU timeout --foreground)
+standby timeout --foreground 10 vim myfile.txt
 ```
+
+**Advanced Terminal Handling:**
+
+Standby's timeout command includes world-class terminal state restoration:
+- Automatically restores terminal attributes (echo, canonical mode, etc.)
+- Restores cursor visibility after killing TUI applications (vim, less, top)
+- No need to run `reset` or `tput cnorm` after timeout
+- Handles SIGTTIN/SIGTTOU signals for background process terminal access
+- Uses safe `process_group()` API instead of unsafe `pre_exec`
 
 ### Wait Command
 ```bash

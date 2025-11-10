@@ -32,14 +32,12 @@ pub fn wait_with_timeout(
             Ok(Some(status)) => return Ok(status),
             Ok(None) => {
                 // Process still running
-                if let Some(timeout) = timeout {
-                    if start.elapsed() >= timeout {
-                        // Timeout reached - need to kill the process
-                        // Send SIGTERM first, then escalate to SIGKILL if needed
-                        return Err(StandbyError::ProcessError(
-                            "Process timeout".to_string(),
-                        ));
-                    }
+                if let Some(timeout) = timeout
+                    && start.elapsed() >= timeout
+                {
+                    // Timeout reached - need to kill the process
+                    // Send SIGTERM first, then escalate to SIGKILL if needed
+                    return Err(StandbyError::ProcessError("Process timeout".to_string()));
                 }
 
                 // Small sleep to avoid busy-waiting
@@ -49,7 +47,7 @@ pub fn wait_with_timeout(
                 return Err(StandbyError::ProcessError(format!(
                     "Failed to wait for process: {}",
                     e
-                )))
+                )));
             }
         }
     }

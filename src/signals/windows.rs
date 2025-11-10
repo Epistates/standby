@@ -43,9 +43,7 @@ pub fn wait_with_timeout(
                 // Process still running
                 if let Some(timeout) = timeout {
                     if start.elapsed() >= timeout {
-                        return Err(StandbyError::ProcessError(
-                            "Process timeout".to_string(),
-                        ));
+                        return Err(StandbyError::ProcessError("Process timeout".to_string()));
                     }
                 }
 
@@ -56,7 +54,7 @@ pub fn wait_with_timeout(
                 return Err(StandbyError::ProcessError(format!(
                     "Failed to wait for process: {}",
                     e
-                )))
+                )));
             }
         }
     }

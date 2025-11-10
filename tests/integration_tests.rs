@@ -12,8 +12,16 @@ fn test_sleep_basic() {
     let elapsed = start.elapsed();
 
     assert!(output.status.success());
-    assert!(elapsed.as_millis() >= 900, "Sleep was too fast: {:?}", elapsed);
-    assert!(elapsed.as_millis() <= 1500, "Sleep was too slow: {:?}", elapsed);
+    assert!(
+        elapsed.as_millis() >= 900,
+        "Sleep was too fast: {:?}",
+        elapsed
+    );
+    assert!(
+        elapsed.as_millis() <= 1500,
+        "Sleep was too slow: {:?}",
+        elapsed
+    );
 }
 
 #[test]
@@ -27,8 +35,16 @@ fn test_sleep_float_seconds() {
     let elapsed = start.elapsed();
 
     assert!(output.status.success());
-    assert!(elapsed.as_millis() >= 400, "Sleep was too fast: {:?}", elapsed);
-    assert!(elapsed.as_millis() <= 1000, "Sleep was too slow: {:?}", elapsed);
+    assert!(
+        elapsed.as_millis() >= 400,
+        "Sleep was too fast: {:?}",
+        elapsed
+    );
+    assert!(
+        elapsed.as_millis() <= 1000,
+        "Sleep was too slow: {:?}",
+        elapsed
+    );
 }
 
 #[test]
@@ -75,7 +91,11 @@ fn test_timeout_kills_process() {
 
     // Should take roughly 1 second (plus signal time)
     assert!(elapsed.as_millis() >= 900);
-    assert!(elapsed.as_millis() <= 2000, "Timeout took too long: {:?}", elapsed);
+    assert!(
+        elapsed.as_millis() <= 2000,
+        "Timeout took too long: {:?}",
+        elapsed
+    );
 }
 
 #[test]
