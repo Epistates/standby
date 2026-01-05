@@ -44,6 +44,14 @@ pub enum Signal {
     Kill,
     /// SIGINT - interrupt signal.
     Int,
+    /// SIGSTOP - pause process (Unix only).
+    Stop,
+    /// SIGCONT - resume process (Unix only).
+    Cont,
+    /// SIGTSTP - terminal stop, can be caught (Unix only).
+    Tstp,
+    /// SIGHUP - hangup signal (Unix only).
+    Hup,
 }
 
 /// Cross-platform signal handling abstraction

@@ -1,8 +1,9 @@
 //! CLI command definitions and execution handlers.
 //!
 //! This module defines the command-line interface for standby,
-//! with subcommands for sleep, timeout, and wait operations.
+//! with subcommands for sleep, timeout, wait, and completions.
 
+pub mod completions;
 pub mod sleep;
 pub mod timeout;
 pub mod wait;
@@ -31,6 +32,9 @@ pub enum Commands {
 
     /// Wait for a process to complete (with optional timeout)
     Wait(wait::WaitArgs),
+
+    /// Generate shell completion scripts
+    Completions(completions::CompletionsArgs),
 }
 
 impl Cli {
@@ -40,6 +44,7 @@ impl Cli {
             Commands::Sleep(args) => sleep::execute(args),
             Commands::Timeout(args) => timeout::execute(args),
             Commands::Wait(args) => wait::execute(args),
+            Commands::Completions(args) => completions::execute(args),
         }
     }
 }

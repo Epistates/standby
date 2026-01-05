@@ -15,6 +15,10 @@ pub fn send_signal(child: &Child, signal: Signal) -> Result<()> {
         Signal::Term => nix_signal::Signal::SIGTERM,
         Signal::Kill => nix_signal::Signal::SIGKILL,
         Signal::Int => nix_signal::Signal::SIGINT,
+        Signal::Stop => nix_signal::Signal::SIGSTOP,
+        Signal::Cont => nix_signal::Signal::SIGCONT,
+        Signal::Tstp => nix_signal::Signal::SIGTSTP,
+        Signal::Hup => nix_signal::Signal::SIGHUP,
     };
 
     nix_signal::kill(pid, nix_sig).map_err(|e| StandbyError::SignalError(e.to_string()))

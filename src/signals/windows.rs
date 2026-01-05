@@ -1,30 +1,43 @@
 use crate::errors::{Result, StandbyError};
 use crate::signals::Signal;
+use std::os::windows::io::AsRawHandle;
 use std::process::Child;
 use std::time::{Duration, Instant};
+use winapi::um::processthreadsapi::TerminateProcess;
 
+/// Send a signal to a child process on Windows.
+///
+/// Note: Windows has limited signal support compared to Unix:
+/// - SIGKILL: Uses TerminateProcess() for forceful termination
+/// - SIGTERM/SIGINT: Not directly supported (use --kill-after 0 for immediate termination)
+/// - SIGSTOP/SIGCONT/SIGTSTP/SIGHUP: Not available on Windows
 pub fn send_signal(child: &Child, signal: Signal) -> Result<()> {
-    // On Windows, we use TerminateProcess which is equivalent to SIGKILL
-    // SIGTERM is not natively supported on Windows
-    let process_id = child.id();
-
-    // For Windows, we'll use a simpler approach:
-    // SIGTERM -> terminate gracefully (actually SIGTERM on Windows isn't standard)
-    // SIGKILL -> terminate forcefully
-
     match signal {
-        Signal::Term | Signal::Int => {
-            // On Windows, we send Ctrl+C or terminate
-            // This would require using the Windows API directly
-            Err(StandbyError::SignalError(
-                "SIGTERM not natively supported on Windows".to_string(),
-            ))
-        }
         Signal::Kill => {
-            // Terminate process forcefully
-            // This would use TerminateProcess from Windows API
+            let handle = child.as_raw_handle() as *mut _;
+            // SAFETY: The handle from AsRawHandle is valid and comes from our own Child process.
+            // TerminateProcess is thread-safe and safe to call from Rust code.
+            let result = unsafe { TerminateProcess(handle, 1) };
+
+            if result != 0 {
+                Ok(())
+            } else {
+                Err(StandbyError::SignalError(
+                    "TerminateProcess failed; process may have already exited".to_string(),
+                ))
+            }
+        }
+        Signal::Term => Err(StandbyError::SignalError(
+            "SIGTERM not available on Windows; use --kill-after 0 to forcefully terminate immediately"
+                .to_string(),
+        )),
+        Signal::Int => Err(StandbyError::SignalError(
+            "SIGINT not available on Windows; use --kill-after 0 to forcefully terminate immediately"
+                .to_string(),
+        )),
+        Signal::Stop | Signal::Cont | Signal::Tstp | Signal::Hup => {
             Err(StandbyError::SignalError(
-                "SIGKILL would require Windows API TerminateProcess".to_string(),
+                "Signal not available on Windows (Unix-only signal)".to_string(),
             ))
         }
     }

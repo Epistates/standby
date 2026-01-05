@@ -68,6 +68,10 @@ standby timeout --preserve-status 10 sleep 60
 
 # Run in foreground process group (like GNU timeout --foreground)
 standby timeout --foreground 10 vim myfile.txt
+
+# Enable verbose debugging (shows timing, PIDs, signal details)
+standby timeout -v 10 sleep 60
+standby timeout --verbose 10 sleep 60
 ```
 
 **Advanced Terminal Handling:**
@@ -78,6 +82,25 @@ Standby's timeout command includes world-class terminal state restoration:
 - No need to run `reset` or `tput cnorm` after timeout
 - Handles SIGTTIN/SIGTTOU signals for background process terminal access
 - Uses safe `process_group()` API instead of unsafe `pre_exec`
+
+**Signal Support:**
+
+Supported signals vary by platform. Use `-s TERM`, `-s KILL`, `-s INT`, `-s STOP`, `-s CONT`, `-s TSTP`, or `-s HUP`:
+
+| Signal | Number | Linux/macOS | Windows | Purpose |
+|--------|--------|-------------|---------|---------|
+| TERM   | 15     | ✅ | ⚠️ | Graceful termination request |
+| KILL   | 9      | ✅ | ✅ | Forceful termination (cannot be caught) |
+| INT    | 2      | ✅ | ⚠️ | Interrupt signal (Ctrl+C) |
+| STOP   | 19     | ✅ | ❌ | Pause process (cannot be caught) |
+| CONT   | 18     | ✅ | ❌ | Resume paused process |
+| TSTP   | 20     | ✅ | ❌ | Terminal stop (like Ctrl+Z, can be caught) |
+| HUP    | 1      | ✅ | ❌ | Hangup signal (terminal closed) |
+
+**Platform Notes:**
+- **Unix/Linux**: Full signal support including SIGSTOP/SIGCONT for job control
+- **Windows**: Limited to KILL (via TerminateProcess); use `--kill-after 0` for immediate forceful termination
+- For graceful termination on all platforms, use the default `-s TERM` and specify `--kill-after` timeout
 
 ### Wait Command
 ```bash
@@ -90,6 +113,29 @@ standby wait 1234 5678 9012
 # Wait with timeout
 standby wait --timeout 30s 1234
 ```
+
+### Completions Command
+```bash
+# Generate bash completion script
+standby completions bash > ~/.bash_completion.d/standby
+
+# Generate zsh completion script
+standby completions zsh > ~/.zsh/completions/_standby
+
+# Generate fish completion script
+standby completions fish > ~/.config/fish/completions/standby.fish
+
+# Install bash completions (Ubuntu/Debian)
+standby completions bash | sudo tee /etc/bash_completion.d/standby
+
+# View bash completion script
+standby completions bash
+```
+
+**Completion Features:**
+- Bash: Full subcommand and signal completion
+- Zsh: Option and subcommand completion with descriptions
+- Fish: Comprehensive descriptions for all options and signals
 
 ## Testing
 
@@ -115,6 +161,7 @@ src/
 ├── main.rs              # CLI entry point
 ├── lib.rs               # Library exports
 ├── errors.rs            # Error types
+├── terminal.rs          # Terminal state management (RAII guard)
 ├── commands/
 │   ├── mod.rs          # Command CLI setup
 │   ├── sleep.rs        # Sleep subcommand
@@ -126,8 +173,8 @@ src/
 │   └── duration.rs     # Duration type
 └── signals/
     ├── mod.rs          # Signal handler abstraction
-    ├── unix.rs         # Unix/Linux signal handling
-    └── windows.rs      # Windows signal handling
+    ├── unix.rs         # Unix/Linux signal handling (7 signals)
+    └── windows.rs      # Windows signal handling (TerminateProcess)
 
 tests/
 └── integration_tests.rs # End-to-end tests
@@ -166,23 +213,35 @@ Standby is designed with POSIX compliance as the baseline, with extensions for G
 ## Dependencies
 
 - **clap** - CLI argument parsing with derive macros
-- **anyhow/thiserror** - Error handling
-- **tokio** - Async runtime
-- **ctrlc** - Signal handling
+- **thiserror** - Error handling
 - **nix** - Unix syscall bindings (Unix only)
 - **winapi** - Windows API bindings (Windows only)
+
+Note: Minimal dependency footprint with no async runtime or external signal handling libraries for synchronous CLI operations.
 
 ## Performance
 
 Standby is compiled to native binaries with optimizations enabled, providing near-native performance with minimal overhead.
 
-## Future Enhancements
+## Features & Timeline
 
-- [ ] Support for additional signals (SIGSTOP, SIGCONT, etc.)
-- [ ] Microsecond/nanosecond precision for specialized use cases
-- [ ] Integration with cron/at for scheduling
-- [ ] Process group management
-- [ ] Resource limits (CPU time, memory)
+### Completed (v0.1.2)
+- [x] Support for additional signals (SIGSTOP, SIGCONT, SIGTSTP, SIGHUP)
+- [x] Windows TerminateProcess support for SIGKILL
+- [x] RAII terminal guard pattern for guaranteed restoration
+
+### Completed (v0.2.0)
+- [x] Linux timerfd support for nanosecond-precision timeouts (~1μs latency)
+- [x] macOS adaptive polling for efficient timeout handling (1-10ms latency)
+- [x] Shell completion scripts for bash, zsh, and fish
+- [x] Optional verbose mode (`-v/--verbose`) for timeout troubleshooting
+- [x] Debug logging with timing information and signal details
+
+### Future Enhancements
+- [ ] True kqueue integration for macOS (currently uses adaptive polling)
+- [ ] Real-time timer precision improvements (sub-microsecond)
+- [ ] Integration with system schedulers (cron, at)
+- [ ] Resource limits (CPU time, memory usage tracking)
 
 ## License
 

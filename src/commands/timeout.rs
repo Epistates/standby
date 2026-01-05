@@ -2,18 +2,15 @@
 //!
 //! Runs a command with a time limit and signal handling.
 
+use crate::debug::debug;
 use crate::errors::{Result, StandbyError};
 use crate::signals::{Signal, SignalHandler};
+use crate::terminal::TerminalGuard;
 use crate::time::parse_duration;
 use clap::Parser;
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
-
-#[cfg(unix)]
-use nix::sys::termios::{self, SetArg, Termios};
-#[cfg(unix)]
-use std::os::unix::io::{AsRawFd, BorrowedFd};
 
 /// Arguments for the timeout subcommand.
 #[derive(Parser)]
@@ -43,15 +40,28 @@ pub struct TimeoutArgs {
     /// Run command in foreground (same process group)
     #[arg(long)]
     pub foreground: bool,
+
+    /// Enable verbose output for debugging timeout behavior
+    #[arg(short = 'v', long)]
+    pub verbose: bool,
 }
 
 /// Execute the timeout command.
 pub fn execute(args: TimeoutArgs) -> Result<()> {
+    // Initialize verbose mode
+    crate::debug::init_verbose(args.verbose);
+
+    // RAII guard ensures terminal restoration on all code paths
+    let _terminal = TerminalGuard::new();
+
+    debug!("Timeout command started");
+    debug!("Duration: {}", args.duration);
+    debug!("Command: {} {:?}", args.command, args.args);
+
     let timeout_duration = parse_duration(&args.duration)?;
     let timeout_std = timeout_duration.to_std_duration();
 
-    // Save terminal attributes before spawning child
-    let saved_attrs = save_terminal_attrs();
+    debug!("Parsed timeout: {:.3}s", timeout_std.as_secs_f64());
 
     // On Unix, ignore SIGTTIN and SIGTTOU to allow background child to access terminal
     // This matches GNU timeout behavior and prevents child from being suspended
@@ -84,31 +94,35 @@ pub fn execute(args: TimeoutArgs) -> Result<()> {
     }
 
     let mut child = command.spawn().map_err(|e| {
-        // Restore terminal before returning error
-        if let Some(ref attrs) = saved_attrs {
-            restore_terminal_attrs(attrs);
-        }
         StandbyError::ProcessError(format!("Failed to spawn command '{}': {}", args.command, e))
     })?;
 
     let child_id = child.id();
+    debug!("Child process spawned with PID: {}", child_id);
+
     let signal = parse_signal(&args.signal)?;
+    debug!(
+        "Primary signal: {} ({})",
+        args.signal,
+        signal_to_number(&signal)
+    );
+
     let kill_after = if let Some(k) = args.kill_after {
-        Some(parse_duration(&k)?.to_std_duration())
+        let duration = parse_duration(&k)?.to_std_duration();
+        debug!("Kill-after enabled: {:.3}s", duration.as_secs_f64());
+        Some(duration)
     } else {
         None
     };
 
     // Wait for the process with timeout
     let start = std::time::Instant::now();
+    debug!("Starting timeout wait loop");
 
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                // Process completed successfully - restore terminal
-                if let Some(ref attrs) = saved_attrs {
-                    restore_terminal_attrs(attrs);
-                }
+                // Process completed successfully
                 if !args.preserve_status {
                     std::process::exit(status.code().unwrap_or(0));
                 }
@@ -118,6 +132,14 @@ pub fn execute(args: TimeoutArgs) -> Result<()> {
                 // Process still running
                 if start.elapsed() >= timeout_std {
                     // Timeout reached - send signal
+                    let elapsed = start.elapsed();
+                    debug!(
+                        "Timeout reached at {:.3}s, sending signal {} to pid {}",
+                        elapsed.as_secs_f64(),
+                        args.signal,
+                        child_id
+                    );
+
                     eprintln!(
                         "timeout: sending signal {} to pid {}",
                         args.signal, child_id
@@ -136,10 +158,7 @@ pub fn execute(args: TimeoutArgs) -> Result<()> {
                         loop {
                             match child.try_wait() {
                                 Ok(Some(status)) => {
-                                    // Restore terminal after kill
-                                    if let Some(ref attrs) = saved_attrs {
-                                        restore_terminal_attrs(attrs);
-                                    }
+                                    // Terminal automatically restored on drop
                                     if !args.preserve_status {
                                         std::process::exit(status.code().unwrap_or(1));
                                     }
@@ -147,6 +166,11 @@ pub fn execute(args: TimeoutArgs) -> Result<()> {
                                 }
                                 Ok(None) => {
                                     if kill_start.elapsed() >= kill_duration {
+                                        debug!(
+                                            "Kill-after timeout reached at {:.3}s, sending SIGKILL to pid {}",
+                                            kill_start.elapsed().as_secs_f64(),
+                                            child_id
+                                        );
                                         eprintln!("timeout: sending SIGKILL to pid {}", child_id);
                                         SignalHandler::send_signal(&child, Signal::Kill).ok();
                                         // Give a moment for SIGKILL to take effect
@@ -156,10 +180,7 @@ pub fn execute(args: TimeoutArgs) -> Result<()> {
                                     thread::sleep(Duration::from_millis(10));
                                 }
                                 Err(e) => {
-                                    // Restore terminal before returning error
-                                    if let Some(ref attrs) = saved_attrs {
-                                        restore_terminal_attrs(attrs);
-                                    }
+                                    // Terminal automatically restored on drop
                                     return Err(StandbyError::ProcessError(format!(
                                         "Error waiting for process: {}",
                                         e
@@ -171,20 +192,14 @@ pub fn execute(args: TimeoutArgs) -> Result<()> {
                         // Just wait for process to die
                         match child.wait() {
                             Ok(status) => {
-                                // Restore terminal after signal
-                                if let Some(ref attrs) = saved_attrs {
-                                    restore_terminal_attrs(attrs);
-                                }
+                                // Terminal automatically restored on drop
                                 if !args.preserve_status {
                                     std::process::exit(status.code().unwrap_or(1));
                                 }
                                 return Ok(());
                             }
                             Err(e) => {
-                                // Restore terminal before returning error
-                                if let Some(ref attrs) = saved_attrs {
-                                    restore_terminal_attrs(attrs);
-                                }
+                                // Terminal automatically restored on drop
                                 return Err(StandbyError::ProcessError(format!(
                                     "Error waiting for process: {}",
                                     e
@@ -197,10 +212,7 @@ pub fn execute(args: TimeoutArgs) -> Result<()> {
                 thread::sleep(Duration::from_millis(10));
             }
             Err(e) => {
-                // Restore terminal before returning error
-                if let Some(ref attrs) = saved_attrs {
-                    restore_terminal_attrs(attrs);
-                }
+                // Terminal automatically restored on drop
                 return Err(StandbyError::ProcessError(format!(
                     "Failed to wait for process: {}",
                     e
@@ -216,84 +228,28 @@ fn parse_signal(signal_str: &str) -> Result<Signal> {
         "TERM" | "15" => Ok(Signal::Term),
         "KILL" | "9" => Ok(Signal::Kill),
         "INT" | "2" => Ok(Signal::Int),
+        "STOP" | "19" => Ok(Signal::Stop),
+        "CONT" | "18" => Ok(Signal::Cont),
+        "TSTP" | "20" => Ok(Signal::Tstp),
+        "HUP" | "1" => Ok(Signal::Hup),
         _ => Err(StandbyError::InvalidArgument(format!(
-            "Unknown signal: {}",
+            "Unknown signal: {} (supported: TERM, KILL, INT, STOP, CONT, TSTP, HUP)",
             signal_str
         ))),
     }
 }
 
-/// Save terminal attributes from stdin if available (Unix only).
-#[cfg(unix)]
-fn save_terminal_attrs() -> Option<Termios> {
-    let stdin = std::io::stdin();
-    let fd = stdin.as_raw_fd();
-
-    // Try to get terminal attributes - will fail if not a TTY
-    // SAFETY: stdin remains valid for the lifetime of the program
-    unsafe {
-        let borrowed_fd = BorrowedFd::borrow_raw(fd);
-        termios::tcgetattr(borrowed_fd).ok()
+/// Convert Signal enum to POSIX signal number for display.
+fn signal_to_number(signal: &Signal) -> i32 {
+    match signal {
+        Signal::Hup => 1,
+        Signal::Int => 2,
+        Signal::Term => 15,
+        Signal::Kill => 9,
+        Signal::Stop => 19,
+        Signal::Cont => 18,
+        Signal::Tstp => 20,
     }
-}
-
-/// Restore terminal attributes to stdin (Unix only).
-#[cfg(unix)]
-fn restore_terminal_attrs(attrs: &Termios) {
-    let stdin = std::io::stdin();
-    let fd = stdin.as_raw_fd();
-
-    // Attempt to restore - ignore errors as terminal may have been closed
-    // SAFETY: stdin remains valid for the lifetime of the program
-    unsafe {
-        let borrowed_fd = BorrowedFd::borrow_raw(fd);
-        let _ = termios::tcsetattr(borrowed_fd, SetArg::TCSANOW, attrs);
-    }
-
-    // After restoring termios, also restore cursor visibility
-    // This is separate because cursor state is controlled by escape sequences,
-    // not by the termios struct
-    restore_cursor_visibility();
-}
-
-/// Placeholder for non-Unix platforms
-#[cfg(not(unix))]
-fn save_terminal_attrs() -> Option<()> {
-    None
-}
-
-/// Placeholder for non-Unix platforms
-#[cfg(not(unix))]
-fn restore_terminal_attrs(_attrs: &()) {
-    // Still restore cursor visibility on Windows
-    restore_cursor_visibility();
-}
-
-/// Restore cursor visibility by sending DECTCEM escape sequence (all platforms).
-///
-/// TUI applications often hide the cursor with `\e[?25l` (DECTCEM hide cursor).
-/// When killed, they don't get to send `\e[?25h` (DECTCEM show cursor) to restore it.
-/// This function explicitly sends the show cursor sequence.
-///
-/// This is separate from termios restoration because:
-/// - termios controls terminal driver behavior (echo, canonical mode, etc.)
-/// - Escape sequences control terminal emulator display (cursor, colors, etc.)
-///
-/// The cursor visibility state lives in the terminal emulator process, not in termios.
-/// That's why `exec zsh` doesn't fix it, but opening a new terminal tab does.
-///
-/// This matches the behavior of `tput cnorm` and is safe to call multiple times.
-fn restore_cursor_visibility() {
-    use std::io::Write;
-
-    // Send DECTCEM "show cursor" escape sequence: CSI ? 25 h
-    // \x1b = ESC, [?25h = show cursor
-    // This is idempotent - safe to send even if cursor is already visible
-    let _ = std::io::stdout().write_all(b"\x1b[?25h");
-
-    // Flush immediately to ensure the escape sequence is sent
-    // Ignore errors - terminal may be closed or redirected
-    let _ = std::io::stdout().flush();
 }
 
 /// Set up TTY signal handling to allow background child to access terminal (Unix only).

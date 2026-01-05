@@ -28,8 +28,11 @@
 //! - **Zero-copy**: Efficient nanosecond-precision duration handling
 
 pub mod commands;
+pub mod debug;
 pub mod errors;
 pub mod signals;
+pub mod terminal;
 pub mod time;
+pub mod timing;
 
 pub use errors::{Result, StandbyError};
