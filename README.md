@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/standby.svg)](https://crates.io/crates/standby)
 [![Docs](https://docs.rs/standby/badge.svg)](https://docs.rs/standby)
-[![CI](https://github.com/epistates/standby/actions/workflows/ci.yml/badge.svg)](https://github.com/epistates/standby/actions/workflows/ci.yml)
+[![CI](https://github.com/Epistates/standby/actions/workflows/ci.yml/badge.svg)](https://github.com/Epistates/standby/actions/workflows/ci.yml)
 [![License](https://img.shields.io/crates/l/standby.svg)](#license)
 
 `sleep`, `timeout` and `wait` in one binary that behaves the same on Linux, macOS and Windows.
@@ -21,10 +21,23 @@ standby wait --timeout 1h 4242       # block until process 4242 has exited
 ## Install
 
 ```bash
-cargo install standby
+cargo install standby --locked
 ```
 
-This needs Rust 1.88 or later. To build from a checkout, run `cargo build --release`; the binary is `target/release/standby`.
+This needs Rust 1.88 or later. To build from a checkout, run `cargo build --release --locked`; the binary is `target/release/standby`. Run `standby --version` to check the install.
+
+Upgrading from 0.2? Some exit statuses and defaults changed. See the [changelog](CHANGELOG.md) for the list marked **Breaking**.
+
+### Platforms
+
+| Platform | `sleep` | `timeout` | `wait` |
+|----------|---------|-----------|--------|
+| Linux (x86-64, arm64) | yes | process group, signals | pidfd |
+| macOS | yes | process group, signals | kqueue |
+| FreeBSD, NetBSD, OpenBSD, DragonFly | yes | process group, signals | kqueue |
+| Windows | yes | job object, no signals | process handle |
+
+Linux, macOS and Windows are tested in CI on every change. The BSDs are built from the same Unix code but are not tested there.
 
 ## Durations
 
@@ -54,6 +67,8 @@ standby sleep infinity     # until interrupted
 ```
 
 ## timeout
+
+Runs a command and stops it, and everything it started, if it is still running when the time is up.
 
 ```
 standby timeout [OPTIONS] <DURATION> <COMMAND>...
@@ -115,7 +130,7 @@ On Windows there are no signals. At the time limit standby terminates the comman
 ## wait
 
 ```
-standby wait [--timeout <DURATION>] <PID>...
+standby wait [OPTIONS] <PID>...
 ```
 
 ```bash
@@ -124,6 +139,10 @@ standby wait 4242 4243 4244          # until all three have
 standby wait --timeout 30m 4242      # give up after 30 minutes
 standby wait --timeout 0 4242        # check once: 0 if it has exited, 124 if not
 ```
+
+| Option | Meaning |
+|--------|---------|
+| `-t`, `--timeout <DURATION>` | Give up after this long. One timeout covers all the processes. `0` checks once without waiting; `infinity` or no option waits forever. |
 
 A process ID that does not exist counts as already exited. The exit status of the process is not available: only its parent can collect that.
 
@@ -134,6 +153,39 @@ A process ID that does not exist counts as already exited. The exit status of th
 | 1 | A process could not be watched. |
 
 `wait` uses pidfd on Linux, kqueue on macOS and the BSDs, and a process handle on Windows. Where the kernel will not report the exit (Linux before 5.3, or another user's process on macOS), it probes at intervals of up to 100 ms instead.
+
+## Recipes
+
+```bash
+# Fail a CI step that hangs, and leave no stray processes behind
+standby timeout -k 10 15m cargo test
+
+# Run a dev server for a minute, then stop it and its workers
+standby timeout -k 5 60 npm run dev
+
+# Tell a timeout apart from a failure
+standby timeout 30 ./check.sh
+case $? in
+  0)   echo passed ;;
+  124) echo "timed out" ;;
+  *)   echo "failed" ;;
+esac
+
+# Run something after another process finishes
+standby wait 4242 && echo "process 4242 has finished"
+
+# Poll for a condition for up to two minutes
+standby timeout 2m sh -c 'until curl -fs localhost:8080/health; do standby sleep 1; done'
+```
+
+## Troubleshooting
+
+- **The command exits at once with status 126 or 127.** 127 means the command was not found on `PATH`; 126 means it was found but is not executable. The message on stderr names the command and the system error.
+- **The command cannot read from the terminal.** It runs outside the terminal's foreground process group, so a read fails at once with an I/O error. Use `--foreground`, or redirect its input.
+- **A child survives the time limit.** A process that moved itself to its own process group or session (a daemon, for example) is no longer in the command's group, so the signal does not reach it. Use `--kill-after` to make sure the rest of the group is gone, or stop such a process by its own means.
+- **`standby wait` reports `timed out` with status 124.** That is the timeout, not a failure of the process. Scripts can compare the status with 124.
+- **Status 125.** standby failed before or while running the command, for example on a bad option or duration. The message is on stderr.
+- **Nothing printed at the time limit.** That is deliberate. Add `--verbose` to see each signal sent, and check the exit status for 124.
 
 ## Shell completions
 
@@ -166,7 +218,9 @@ just check    # format, lint, test and docs, as CI runs them
 just deny     # dependency licenses, sources and advisories
 ```
 
-Without [just](https://github.com/casey/just): `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`.
+Without [just](https://github.com/casey/just): `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test`. See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose a change.
+
+The [changelog](CHANGELOG.md) lists what changed in each release. To report a security problem, follow [SECURITY.md](SECURITY.md).
 
 ## License
 

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Documentation: the README has platform support, recipes and troubleshooting, `wait` documents
+  `-t`, and there is a contributing guide. The security policy lists the known limits.
+
 ## [0.3.0] - 2026-11-27
 
 The engine behind all three commands was rebuilt. Several long-standing defects are fixed, and
@@ -472,3 +479,10 @@ All fixes are automatic:
 - Resource limits (CPU time, memory usage)
 - Integration with cron/at for advanced scheduling
 - Performance benchmarking suite
+
+[Unreleased]: https://github.com/Epistates/standby/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Epistates/standby/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/Epistates/standby/compare/v0.1.1...v0.2.0
+[0.1.2]: https://github.com/Epistates/standby/compare/v0.1.1...v0.2.0
+[0.1.1]: https://github.com/Epistates/standby/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/Epistates/standby/releases/tag/v0.1.0

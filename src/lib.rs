@@ -8,6 +8,10 @@
 //! - [`signals`] parses signal names and numbers such as `TERM`, `SIGKILL`
 //!   and `9`.
 //!
+//! The crate needs Rust 1.88 or later and builds on Unix and Windows. The
+//! command-line tool, its options and its exit statuses are described in the
+//! [README](https://github.com/Epistates/standby#readme).
+//!
 //! ```
 //! use standby::time::{Duration, parse_duration};
 //!
