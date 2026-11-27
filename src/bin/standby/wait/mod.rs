@@ -31,11 +31,11 @@ pub fn run(args: WaitArgs) -> i32 {
         match sys::wait_for_exit(pid, deadline) {
             Ok(true) => {}
             Ok(false) => {
-                eprintln!("standby: timed out waiting for process {pid}");
+                report!("standby: timed out waiting for process {pid}");
                 return exit::TIMED_OUT;
             }
             Err(err) => {
-                eprintln!("standby: cannot wait for process {pid}: {err}");
+                report!("standby: cannot wait for process {pid}: {err}");
                 return 1;
             }
         }

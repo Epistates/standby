@@ -118,6 +118,8 @@ mod notify {
     use nix::sys::event::{EvFlags, EventFilter, FilterFlag, KEvent, Kqueue};
     use nix::sys::time::TimeSpec;
 
+    const LONGEST_WAIT: Duration = Duration::from_secs(24 * 60 * 60);
+
     pub fn wait_for_exit(pid: Pid, deadline: Option<Instant>) -> io::Result<Option<bool>> {
         let queue = Kqueue::new()?;
         let watch = KEvent::new(
@@ -141,9 +143,11 @@ mod notify {
 
         let mut events = [watch];
         loop {
+            // The kernel rejects a timeout of many years. A shorter one is
+            // harmless: on expiry the deadline is checked and the wait resumes.
             let timeout = deadline.map(|deadline| {
-                *TimeSpec::from_duration(deadline.saturating_duration_since(Instant::now()))
-                    .as_ref()
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                *TimeSpec::from_duration(remaining.min(LONGEST_WAIT)).as_ref()
             });
             match queue.kevent(&[], &mut events, timeout) {
                 Ok(0) => {

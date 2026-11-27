@@ -76,7 +76,7 @@ Everything after the command belongs to the command, so `standby timeout 5 grep 
 | `-f`, `--foreground` | Leave the command in standby's process group so that it can read from the terminal. Its children are then not stopped at the time limit. |
 | `-v`, `--verbose` | Report on stderr each signal that is sent. |
 
-A duration of `0` or `infinity` means no limit.
+A duration of `0` or `infinity` means no limit. An option given twice takes its last value, so an alias can set defaults.
 
 ### Exit status
 
@@ -99,9 +99,9 @@ On Linux, macOS and the BSDs:
 
 While the command runs, standby passes on the signals it receives: `HUP`, `INT`, `QUIT`, `TERM`, `USR1` and `USR2`. Ctrl-C therefore stops the command whether standby was started from a terminal or from a script, and `kill <standby pid>` does not leave the command behind. Ctrl-Z suspends the command along with standby, and `fg` resumes both. If a signal ends the command before the time limit, standby ends the same way, so that a calling shell sees the signal.
 
-`KILL` and `STOP` cannot be caught. If standby itself is killed with `KILL`, the command keeps running.
+A signal that standby was started with ignored stays ignored, in standby and in the command, so `nohup standby timeout ...` survives a hangup. `KILL` and `STOP` cannot be caught: if standby itself is killed with `KILL`, the command keeps running.
 
-The command does not run in the terminal's foreground process group, so it cannot read from the terminal. Use `--foreground` for interactive programs.
+The command does not run in the terminal's foreground process group, so it cannot read from the terminal: a read fails at once. Use `--foreground` for interactive programs.
 
 On Windows there are no signals. At the time limit standby terminates the command and every process it started, whichever signal was asked for; `--kill-after` and `--foreground` have no effect. If standby itself is terminated, Windows terminates the command's process tree with it. The status is 124, or 137 with `-s KILL`.
 

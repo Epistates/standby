@@ -30,7 +30,10 @@ pub fn run(args: &TimeoutArgs) -> Result<i32, Failure> {
     let mut command = Command::new(&args.command[0]);
     command.args(&args.command[1..]);
     let mut child = command.spawn().map_err(Failure::Spawn)?;
-    // Without a job, only the command itself can be terminated.
+    // Without a job, only the command itself can be terminated. A process the
+    // command starts before this line runs would not join the job; a command
+    // needs longer than that to load. Starting it suspended would close the
+    // gap, but std exposes the thread to resume only from Rust 1.100.
     let job = job.filter(|job| job.assign(&child));
 
     let timed_out = match supervise(&child, args) {
@@ -44,7 +47,7 @@ pub fn run(args: &TimeoutArgs) -> Result<i32, Failure> {
     };
     if timed_out {
         if args.verbose {
-            eprintln!(
+            report!(
                 "standby: terminating command '{}'",
                 args.command[0].to_string_lossy()
             );

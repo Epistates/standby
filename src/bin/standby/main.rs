@@ -3,6 +3,16 @@
 #[cfg(not(any(unix, windows)))]
 compile_error!("standby runs on Unix and Windows only");
 
+/// Prints a line to stderr, like `eprintln!`, but carries on when stderr is
+/// closed. `eprintln!` panics there, and a panic while a command is running
+/// would leave that command without its time limit.
+macro_rules! report {
+    ($($arg:tt)*) => {{
+        use std::io::Write as _;
+        let _ = writeln!(std::io::stderr(), $($arg)*);
+    }};
+}
+
 mod cli;
 mod sleep;
 #[cfg(unix)]
@@ -79,7 +89,7 @@ fn completions(args: cli::CompletionsArgs) -> i32 {
         Ok(()) => 0,
         Err(err) if err.kind() == io::ErrorKind::BrokenPipe => 0,
         Err(err) => {
-            eprintln!("standby: {err}");
+            report!("standby: {err}");
             1
         }
     }

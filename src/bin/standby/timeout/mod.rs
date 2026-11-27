@@ -21,7 +21,7 @@ pub fn run(args: TimeoutArgs) -> i32 {
         Ok(status) => status,
         Err(Failure::Spawn(err)) => {
             let command = args.command[0].to_string_lossy();
-            eprintln!("standby: failed to run command '{command}': {err}");
+            report!("standby: failed to run command '{command}': {err}");
             if err.kind() == io::ErrorKind::NotFound {
                 exit::NOT_FOUND
             } else {
@@ -29,7 +29,7 @@ pub fn run(args: TimeoutArgs) -> i32 {
             }
         }
         Err(Failure::Supervise(err)) => {
-            eprintln!("standby: {err}");
+            report!("standby: {err}");
             exit::FAILURE
         }
     }

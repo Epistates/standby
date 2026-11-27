@@ -79,7 +79,9 @@ pub struct SleepArgs {
 }
 
 #[derive(Args)]
-#[command(after_help = TIMEOUT_HELP)]
+// A repeated option overrides the earlier one, as in GNU `timeout`, so that
+// an alias can set defaults.
+#[command(after_help = TIMEOUT_HELP, args_override_self = true)]
 pub struct TimeoutArgs {
     /// Signal to send at the time limit, by name or number
     #[arg(short, long, value_name = "SIGNAL", default_value = "TERM", value_parser = signal)]
@@ -197,6 +199,16 @@ mod tests {
         assert!(args.preserve_status && args.foreground && args.verbose);
         assert_eq!(args.duration, Duration::from_secs(60));
         assert_eq!(args.command, ["make", "-j8"]);
+    }
+
+    #[test]
+    fn a_repeated_option_overrides_the_earlier_one() {
+        let args = timeout(&[
+            "-k", "5", "-s", "INT", "-v", "-k", "9", "-s", "KILL", "-v", "1", "x",
+        ]);
+        assert_eq!(args.kill_after, Some(Duration::from_secs(9)));
+        assert_eq!(args.signal, Signal::KILL);
+        assert!(args.verbose);
     }
 
     #[test]

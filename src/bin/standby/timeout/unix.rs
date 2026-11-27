@@ -12,9 +12,10 @@
 use super::{Failure, Outcome, limit};
 use crate::cli::TimeoutArgs;
 use crate::terminal::TerminalState;
-use nix::errno::Errno;
+use nix::libc;
 use nix::sys::resource::{Resource, setrlimit};
 use nix::sys::signal::{self, SigHandler, SigSet, Signal};
+use nix::sys::wait::{WaitPidFlag, WaitStatus, waitpid};
 use nix::unistd::{self, Pid};
 use signal_hook::consts::signal::{
     SIGCHLD, SIGHUP, SIGINT, SIGQUIT, SIGTERM, SIGTSTP, SIGUSR1, SIGUSR2,
@@ -22,8 +23,10 @@ use signal_hook::consts::signal::{
 use signal_hook::iterator::Signals;
 use std::ffi::{OsStr, c_int};
 use std::io;
+use std::mem::MaybeUninit;
 use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::process::{Child, Command, ExitStatus};
+use std::ptr;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -133,7 +136,11 @@ fn supervise(
         let signal = match events.next(kill_at.or(limit_at)) {
             Event::Signal(SIGCHLD) => continue,
             Event::Signal(SIGTSTP) => {
-                target.suspend();
+                // The signal may be older than the command's exit. Stopping
+                // then would leave standby stopped with nothing to wait for.
+                if child.try_wait()?.is_none() {
+                    target.suspend();
+                }
                 continue;
             }
             Event::Signal(number) => match Signal::try_from(number) {
@@ -178,14 +185,16 @@ fn stop_stragglers(target: &Target, events: &Events, kill_at: Instant) {
     while target.group_has_members() {
         let now = Instant::now();
         if now >= kill_at {
-            target.announce(Signal::SIGKILL);
             let _ = signal::killpg(target.pid, Signal::SIGKILL);
+            target.announce(Signal::SIGKILL);
             return;
         }
         match events.next(Some(kill_at.min(now + pause))) {
             Event::Signal(SIGCHLD | SIGTSTP) | Event::Deadline => {}
             Event::Signal(number) => {
-                if let Ok(signal) = Signal::try_from(number) {
+                if let Ok(signal) = Signal::try_from(number)
+                    && target.group_has_members()
+                {
                     let _ = signal::killpg(target.pid, signal);
                 }
             }
@@ -208,7 +217,7 @@ impl Target<'_> {
     fn announce(&self, signal: Signal) {
         if self.verbose {
             let name = signal.as_str();
-            eprintln!(
+            report!(
                 "standby: sending signal {} to command '{}'",
                 name.strip_prefix("SIG").unwrap_or(name),
                 self.name.to_string_lossy()
@@ -216,16 +225,25 @@ impl Target<'_> {
         }
     }
 
-    /// Whether any process is left in the command's process group. Only
-    /// meaningful once the command itself has been reaped.
+    /// Whether a process that can be signalled is left in the command's
+    /// process group. Only meaningful once the command itself has been reaped.
     fn group_has_members(&self) -> bool {
-        signal::killpg(self.pid, None) != Err(Errno::ESRCH)
+        // As PID 1 in a container, or as a subreaper, standby inherits the
+        // command's orphans. Unreaped, they would count as members for ever.
+        let group = Pid::from_raw(-self.pid.as_raw());
+        while matches!(
+            waitpid(group, Some(WaitPidFlag::WNOHANG)),
+            Ok(WaitStatus::Exited(..) | WaitStatus::Signaled(..))
+        ) {}
+        // An error means that the group is gone, or holds only what cannot
+        // be signalled anyway: a zombie, or another user's process.
+        signal::killpg(self.pid, None).is_ok()
     }
 
     /// Sends a signal to the command and makes sure it is acted on.
     fn signal(&self, signal: Signal) {
-        self.announce(signal);
         self.deliver(signal);
+        self.announce(signal);
         // A stopped process acts on a signal only once it is continued.
         let stops = matches!(
             signal,
@@ -277,9 +295,12 @@ struct Events(Receiver<c_int>);
 impl Events {
     /// Starts collecting signals. With `job_control`, Ctrl-Z is collected too.
     fn listen(job_control: bool) -> io::Result<Self> {
+        // A signal that standby was started with ignored stays ignored, here
+        // and in the command, which inherits that: `nohup standby timeout ...`
+        // must survive a hangup. Catching it would undo both.
         let mut wanted = vec![SIGCHLD];
-        wanted.extend(FORWARDED);
-        if job_control {
+        wanted.extend(FORWARDED.into_iter().filter(|&signal| !is_ignored(signal)));
+        if job_control && !is_ignored(SIGTSTP) {
             wanted.push(SIGTSTP);
         }
 
@@ -347,14 +368,35 @@ fn ignore_terminal_stops() {
     }
 }
 
+/// Whether the signal is currently set to be ignored.
+fn is_ignored(signal: c_int) -> bool {
+    let mut current = MaybeUninit::<libc::sigaction>::uninit();
+    // SAFETY: with no new action, `sigaction` only reports the current one,
+    // into storage that is valid for writes.
+    let queried = unsafe { libc::sigaction(signal, ptr::null(), current.as_mut_ptr()) } == 0;
+    // SAFETY: on success the kernel filled the structure in.
+    queried && unsafe { current.assume_init() }.sa_sigaction == libc::SIG_IGN
+}
+
 /// Ends standby with the signal that ended the command.
 ///
 /// Returns if that is not possible; the caller then exits with 128 plus the
-/// signal number.
+/// signal number. That is the case for PID 1 in a container, which the kernel
+/// shields from signals it does not handle.
 fn die_of(signal: c_int) {
+    let Ok(signal) = Signal::try_from(signal) else {
+        return;
+    };
     // If the signal is one that dumps core, the core would be standby's and
     // would pass for the command's. Without this guarantee, do not raise.
-    if setrlimit(Resource::RLIMIT_CORE, 0, 0).is_ok() {
-        let _ = signal_hook::low_level::emulate_default_handler(signal);
+    if setrlimit(Resource::RLIMIT_CORE, 0, 0).is_err() {
+        return;
     }
+    // SAFETY: `SIG_DFL` installs no handler. It replaces the one that feeds
+    // `Events`, which standby no longer reads: it is about to exit.
+    let _ = unsafe { signal::signal(signal, SigHandler::SigDfl) };
+    let mut mask = SigSet::empty();
+    mask.add(signal);
+    let _ = mask.thread_unblock();
+    let _ = signal::raise(signal);
 }

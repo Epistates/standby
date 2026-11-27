@@ -62,6 +62,8 @@ some of the fixes change behaviour that scripts may have relied on. Those are ma
   the first signal but some of them are still running, standby waits for them and sends `KILL` to
   what is left when the time is up.
 - `timeout` suspends the command when it is itself suspended with Ctrl-Z, and resumes it on `fg`.
+- `timeout` leaves alone any signal it was started with ignored, so `nohup standby timeout ...`
+  survives a hangup, and an option given twice takes its last value, so an alias can set defaults.
 - `timeout` accepts every signal the platform defines, by name with or without `SIG`, or by number.
 - `timeout` has the short options `-p` for `--preserve-status` and `-f` for `--foreground`.
 - `sleep` takes several durations and adds them up: `standby sleep 1m 30s`.

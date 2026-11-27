@@ -331,6 +331,26 @@ mod wait {
         reaper.join().unwrap().unwrap();
     }
 
+    /// macOS rejects a kernel timeout of many years.
+    #[test]
+    fn a_very_long_timeout_is_accepted() {
+        for timeout in ["100000d", "3e9", "1e17", "1e30"] {
+            let mut child = standby(&["sleep", "0.2"])
+                .spawn()
+                .expect("standby should start");
+            let pid = child.id().to_string();
+            let reaper = thread::spawn(move || child.wait());
+            let output = run(&["wait", "-t", timeout, &pid]);
+            assert_eq!(
+                output.status.code(),
+                Some(0),
+                "{timeout}: {}",
+                stderr(&output)
+            );
+            reaper.join().unwrap().unwrap();
+        }
+    }
+
     #[test]
     fn a_usage_error_reports_status_2() {
         for args in [
@@ -572,6 +592,49 @@ mod unix {
         let status = standby.0.wait().unwrap();
         assert_eq!(status.code(), Some(137));
         assert!(start.elapsed() < PROMPTLY, "{:?}", start.elapsed());
+    }
+
+    #[test]
+    fn a_signal_the_caller_ignores_stays_ignored() {
+        // What `nohup` does: the hangup must reach neither standby nor the command.
+        let script = format!(
+            "trap '' HUP; exec '{STANDBY}' timeout 60 sh -c 'echo ready; sleep 0.5; echo survived'"
+        );
+        let mut command = Command::new("sh");
+        command
+            .args(["-c", &script])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped());
+        let mut standby = Scoped::spawn(&mut command);
+        let mut output = BufReader::new(standby.0.stdout.take().unwrap());
+        let mut line = String::new();
+        output.read_line(&mut line).unwrap();
+        assert_eq!(line.trim(), "ready");
+
+        send("HUP", &standby.pid());
+        line.clear();
+        output.read_line(&mut line).unwrap();
+        assert_eq!(line.trim(), "survived");
+        assert_eq!(standby.0.wait().unwrap().code(), Some(0));
+    }
+
+    #[test]
+    fn verbose_still_stops_the_command_when_stderr_is_closed() {
+        let mut command = standby(&["timeout", "--verbose", "0.3", "sh", "-c"]);
+        command
+            .arg("echo $$; exec sleep 600")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut standby = Scoped::spawn(&mut command);
+        // Nobody reads stderr any more: writing to it now fails.
+        drop(standby.0.stderr.take());
+        let mut pid = String::new();
+        BufReader::new(standby.0.stdout.take().unwrap())
+            .read_line(&mut pid)
+            .unwrap();
+
+        assert_eq!(standby.0.wait().unwrap().code(), Some(124));
+        eventually("the command is gone", || !is_alive(pid.trim()));
     }
 
     #[test]
