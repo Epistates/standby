@@ -1,38 +1,44 @@
 [package]
 name = "standby"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
+rust-version = "1.88"
 authors = ["Nick Paterno <nick@epistates.com>"]
 license = "MIT OR Apache-2.0"
-description = "A world-class cross-platform time management tool for sleep, timeout, and wait operations with full POSIX compliance and GNU coreutils compatibility"
+description = "Cross-platform sleep, timeout and wait: run a command under a time limit that stops its whole process tree, with GNU-compatible exit codes"
 repository = "https://github.com/epistates/standby"
-homepage = "https://github.com/epistates/standby"
 documentation = "https://docs.rs/standby"
 readme = "README.md"
-keywords = ["sleep", "timeout", "wait", "time", "posix"]
+keywords = ["sleep", "timeout", "wait", "process", "cli"]
 categories = ["command-line-utilities"]
-exclude = [".git*", ".claude", "target/", "*.swp", "*.swo", ".DS_Store"]
+include = ["src/**", "tests/**", "README.md", "CHANGELOG.md", "LICENSE-*"]
 
 [dependencies]
-clap = { version = "4.5.54", features = ["derive"] }
-thiserror = "2.0"
+clap = { version = "4.6.10", features = ["derive"] }
+clap_complete = "4.6.12"
+thiserror = "2.0.21"
 
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.30", features = ["process", "signal", "term"] }
+nix = { version = "0.32.0", features = ["event", "poll", "process", "resource", "signal", "term", "time"] }
+signal-hook = "0.4.6"
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3", features = ["winnt", "handleapi", "processthreadsapi", "winbase"] }
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_System_Console",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
 
-[lib]
-name = "standby"
-path = "src/lib.rs"
+[lints.rust]
+missing_docs = "warn"
+unsafe_op_in_unsafe_fn = "deny"
 
-[[bin]]
-name = "standby"
-path = "src/main.rs"
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
 
 [profile.release]
-opt-level = 3
 lto = true
 codegen-units = 1
 strip = true

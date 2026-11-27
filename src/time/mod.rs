@@ -1,39 +1,38 @@
-//! Time duration parsing and representation with nanosecond precision.
+//! Durations as people write them on a command line.
 //!
-//! This module provides utilities for parsing human-readable time format strings
-//! and representing durations with high precision.
+//! # Format
 //!
-//! # Supported Formats
+//! A duration is `infinity` (or `inf`), a bare number of seconds, or one or
+//! more numbers each followed by a unit:
 //!
-//! - Integer seconds: `"5"`
-//! - Floating-point seconds: `"5.5"`, `"0.5"`
-//! - With unit suffixes: `"5s"`, `"1m"`, `"1h"`, `"1d"`
-//! - Compound formats: `"1h30m45s"`
-//! - Special values: `"infinity"`
+//! | Unit | Meaning |
+//! |------|---------|
+//! | `ns` | nanoseconds |
+//! | `us`, `µs` | microseconds |
+//! | `ms` | milliseconds |
+//! | `s` | seconds |
+//! | `m` | minutes |
+//! | `h` | hours |
+//! | `d` | days |
 //!
-//! # Examples
+//! Numbers may have a fraction (`2.5s`) or an exponent (`1e3`). Segments add
+//! up, in any order: `1h30m`, `1m 30s`, `500ms1s`. Values are exact to the
+//! nanosecond, and anything smaller rounds up, so a positive duration never
+//! becomes zero. A value too large to represent becomes [`Duration::Infinite`].
 //!
-//! ```rust
-//! use standby::time::parse_duration;
+//! ```
+//! use standby::time::{Duration, parse_duration};
 //!
-//! // Parse integer seconds
-//! let d = parse_duration("5").unwrap();
-//! assert_eq!(d.secs, 5);
+//! let half = parse_duration("0.5")?;
+//! assert_eq!(half.to_std(), Some(std::time::Duration::from_millis(500)));
 //!
-//! // Parse with unit suffix
-//! let d = parse_duration("1m30s").unwrap();
-//! assert_eq!(d.secs, 90);
-//!
-//! // Parse floating-point
-//! let d = parse_duration("1.5").unwrap();
-//! assert_eq!(d.secs, 1);
-//! assert_eq!(d.nanos, 500_000_000);
+//! let total: Duration = ["1m", "30s"].iter().map(|s| s.parse::<Duration>().unwrap()).sum();
+//! assert_eq!(total, Duration::from_secs(90));
+//! # Ok::<(), standby::StandbyError>(())
 //! ```
 
-/// Duration representation with nanosecond precision.
-pub mod duration;
-/// Time format parsing utilities.
-pub mod parser;
+mod duration;
+mod parser;
 
 pub use duration::Duration;
 pub use parser::parse_duration;

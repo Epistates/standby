@@ -1,38 +1,24 @@
-#![warn(missing_docs)]
-
-//! # Standby: World-class cross-platform time management for Rust applications
+//! Duration and signal parsing behind the `standby` command-line tool.
 //!
-//! This library provides three core capabilities for time-based operations:
+//! `standby` is first a binary: `standby sleep`, `standby timeout` and
+//! `standby wait`. This library holds the parts of it that are useful on
+//! their own and touch no process-wide state:
 //!
-//! 1. **Time Duration Parsing** - Flexible parsing of time formats with nanosecond precision
-//! 2. **Cross-platform Sleep** - Native sleep implementation with full time format support
-//! 3. **Process Timeout Management** - Run commands with timeouts and signal escalation
+//! - [`time`] parses durations such as `90`, `2.5s`, `1h30m` and `infinity`.
+//! - [`signals`] parses signal names and numbers such as `TERM`, `SIGKILL`
+//!   and `9`.
 //!
-//! # Examples
-//!
-//! Parse a duration string:
-//!
-//! ```rust
-//! use standby::time::parse_duration;
-//!
-//! let duration = parse_duration("1m30s").expect("valid duration");
-//! assert_eq!(duration.secs, 90);
 //! ```
+//! use standby::time::{Duration, parse_duration};
 //!
-//! # Features
-//!
-//! - **Flexible Time Formats**: `"5"`, `"5.5"`, `"1m"`, `"1h30m"`, `"infinity"`
-//! - **POSIX Compliant**: Baseline compliance with GNU coreutils extensions
-//! - **Cross-platform**: Works on Unix/Linux, macOS, and Windows
-//! - **Signal Handling**: Configurable signal delivery and escalation
-//! - **Zero-copy**: Efficient nanosecond-precision duration handling
+//! let limit = parse_duration("1m30s")?;
+//! assert_eq!(limit.to_std(), Some(std::time::Duration::from_secs(90)));
+//! assert_eq!(parse_duration("infinity")?, Duration::Infinite);
+//! # Ok::<(), standby::StandbyError>(())
+//! ```
 
-pub mod commands;
-pub mod debug;
 pub mod errors;
 pub mod signals;
-pub mod terminal;
 pub mod time;
-pub mod timing;
 
 pub use errors::{Result, StandbyError};

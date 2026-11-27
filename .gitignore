@@ -1,3 +1,7 @@
 /target
 .DS_Store
-*.*/
+
+# Local tooling and notes that never ship
+/.claude/
+/.strategy/
+/.worktrees/
