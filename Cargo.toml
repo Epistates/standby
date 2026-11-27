@@ -11,7 +11,7 @@ documentation = "https://docs.rs/standby"
 readme = "README.md"
 keywords = ["sleep", "timeout", "wait", "process", "cli"]
 categories = ["command-line-utilities"]
-include = ["src/**", "tests/**", "README.md", "CHANGELOG.md", "LICENSE-*"]
+include = ["src/**/*.rs", "tests/**/*.rs", "README.md", "CHANGELOG.md", "LICENSE-*"]
 
 [dependencies]
 clap = { version = "4.6.10", features = ["derive"] }
