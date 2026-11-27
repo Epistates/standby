@@ -47,6 +47,8 @@ Exit status:
 #[derive(Parser)]
 #[command(
     name = "standby",
+    // Help says `standby` on every platform, not `standby.exe` on Windows.
+    bin_name = "standby",
     version,
     about = "Sleep, run commands under a time limit, and wait for processes to exit"
 )]
